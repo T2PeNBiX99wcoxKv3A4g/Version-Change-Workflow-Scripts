@@ -337,6 +337,7 @@ def set_version(file_path: str, version_key: str, new_version: str,
                   validate_max_matches(max_matches)).run()
 
 
+@DeprecationWarning
 @app.command("change-version", deprecated=True)
 def change_version(file_path: str, version_key: str, new_version: str,
                    require_keywords: str = "", max_matches: int = 1, debug: bool = False):
@@ -395,6 +396,7 @@ def sync_version(file_path: str, version_key: str = "", max_matches: int = -1, d
     _sync_version(file_path, version_key, max_matches, debug)
 
 
+@DeprecationWarning
 @app.command("replace-version", deprecated=True)
 def replace_version(file_path: str, version_key: str = "", max_matches: int = -1, debug: bool = False):
     """Deprecated alias for sync-version."""
