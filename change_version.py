@@ -149,13 +149,18 @@ def replace_version_in_match(match: re.Match[str], old_version: str, new_version
 
 def replace_version_in_target_lines(file_path: str, version_pattern: re.Pattern[str],
                                     required_keywords: list[str], old_version: str,
-                                    new_version: str) -> tuple[int, int]:
+                                    new_version: str, first_only: bool = False) -> tuple[int, int]:
     """Replace old_version on every line whose version_key matches.
 
     Only the version inside the match is rewritten, and only when it is the
     version being replaced. Lines without the key keep their content, so a
     version that merely appears as a substring of an unrelated value is left
     alone. Returns (target_line_count, changed_line_count).
+
+    With first_only, the first matching line is the only one touched. That is
+    the line the version was detected on, so a dependency that happens to carry
+    the same number as the project version — a PackageReference, for instance —
+    is never rewritten by accident.
     """
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f'File not found: {file_path}.')
@@ -171,7 +176,8 @@ def replace_version_in_target_lines(file_path: str, version_pattern: re.Pattern[
         changed_line_count = 0
         for line in file:
             replaced_line = line
-            if match_target_line(line, version_pattern, required_keywords) is not None:
+            if not (first_only and target_line_count > 0) \
+                    and match_target_line(line, version_pattern, required_keywords) is not None:
                 target_line_count += 1
                 replaced_line = version_pattern.sub(replace_match, line)
                 if replaced_line != line:
@@ -275,7 +281,8 @@ class ChangeVersion:
             return
 
         changed_line_count = replace_version_in_target_lines(
-            self.file_path, self.version_pattern, self.required_keywords, self.old_version, self.new_version)[1]
+            self.file_path, self.version_pattern, self.required_keywords, self.old_version, self.new_version,
+            first_only=True)[1]
         if changed_line_count == 0:
             # detect_old_version already proved a matching line exists, so a zero
             # count means that line already carries new_version. Fail before any

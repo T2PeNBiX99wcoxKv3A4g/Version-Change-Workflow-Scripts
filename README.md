@@ -37,11 +37,12 @@ follows a separator (`=`, `:`, `>` or `(`) with an optional surrounding quote, s
 `version = "1.2.3"`, `"Version": "1.2.3"` and `<Version>1.2.3</Version>` all work.
 Lines that start with a comment marker (`#`, `!`, `//`, `<!--`, `;`) are skipped.
 
-The version is detected on the first matching line and then replaced **only on
-lines whose key matches**, so no other line is touched. Every matching line is a
-target, which handles a version that lives in several places at once. A matching
-key whose value is a *different* version is left alone, so `Version="10.0.13"` in
-a `PackageReference` is not clobbered when the project version is `0.1.0`.
+The version is detected on the first matching line and replaced **there**, so
+no other line is touched. That matters when the same key also names something
+else: in a `.csproj`, `<Version>` is the project version, while
+`<PackageReference Version="...">` is a dependency, and the two can legitimately
+hold the same number. Use `sync-version` with `--version-key` for a secondary
+file that keeps the version in several keyed lines.
 
 If no line is replaced because the file already holds the requested version, the command is a
 successful no-op and still records `./.version` and `./.version_old` for `sync-version`. A different
