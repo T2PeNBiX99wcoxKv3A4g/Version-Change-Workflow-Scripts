@@ -50,12 +50,17 @@ def strip_chars(input_string: str, chars: list[str]) -> str:
     return result.strip()
 
 
-def read_version_file(file_path: str) -> str | None:
+def read_required_version(file_path: str, missing_message: str) -> str:
+    """Read the version a previous run recorded, failing when it is missing or empty."""
     if not os.path.isfile(file_path):
-        return None
+        raise InvalidVersionError(missing_message)
+
     with open(file_path, "r", encoding="utf-8") as file:
         version = file.readline().strip()
-    return version or None
+
+    if not version:
+        raise InvalidVersionError(missing_message)
+    return version
 
 
 def write_version_to_file(version: str, file_path: str):
@@ -276,17 +281,15 @@ class ChangeVersion:
         if not os.path.isfile(self.file_path):
             raise FileNotFoundError(f'File not found: {self.file_path}.')
 
-        detected_version: str | None = None
         with open(self.file_path, "r", encoding="utf-8", newline="") as file:
             for line in file:
                 detected_version = find_version_in_line(line, self.version_pattern, self.required_keywords)
                 if detected_version is not None:
-                    break
+                    ic(detected_version, self.new_version)
+                    self.old_version = detected_version
+                    return
 
-        ic(detected_version, self.new_version)
-        if detected_version is None:
-            raise InvalidVersionError(f'No version was found for key "{self.version_key}" in {self.file_path}.')
-        self.old_version = detected_version
+        raise InvalidVersionError(f'No version was found for key "{self.version_key}" in {self.file_path}.')
 
     def run(self):
         self.detect_old_version()
@@ -353,13 +356,11 @@ def create_version_file(new_version: str, debug: bool = False):
 def _sync_version(file_path: str, version_key: str = "", max_matches: int = -1, debug: bool = False):
     debug_output_control(debug)
     validate_max_matches(max_matches)
-    old_version = read_version_file(old_version_file)
-    if old_version is None:
-        raise InvalidVersionError(f'No version was found in {old_version_file}. Run set-version first.')
-    new_version = read_version_file(new_version_file)
-    if new_version is None:
-        raise InvalidVersionError(f'No version was found in {new_version_file}.'
-                                  f' Run set-version or create-version-file first.')
+    old_version = read_required_version(
+        old_version_file, f'No version was found in {old_version_file}. Run set-version first.')
+    new_version = read_required_version(
+        new_version_file, f'No version was found in {new_version_file}.'
+                          f' Run set-version or create-version-file first.')
 
     if old_version == new_version:
         typer.echo(f'Version is already {new_version}; nothing to sync in {file_path}.')
