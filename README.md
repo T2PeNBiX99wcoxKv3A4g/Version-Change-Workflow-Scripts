@@ -1,18 +1,26 @@
 # Version Change Workflow Scripts
 
-`CSharp-Workflow-Scripts` is a legacy name that no longer means anything; the
-scripts are not C#-specific and can be used anywhere.
-
-They are mostly used in my GitHub repositories to bump versions automatically.
+Helpers used by my GitHub workflows to bump versions and keep secondary version files in sync.
+They are not C#-specific: any text-based version file is supported.
 
 ## change_version.py
 
-> `set-version` and `sync-version` are the current command names. The old
-> `change-version` and `replace-version` commands remain as deprecated aliases and
-> forward to the new ones.
+| Command               | Status     | Purpose                                                                 |
+|-----------------------|------------|-------------------------------------------------------------------------|
+| `set-version`         | current    | Set the authoritative version in the primary file and record old/new    |
+| `sync-version`        | current    | Apply the recorded old → new version to another file                    |
+| `create-version-file` | current    | Write `.version` only, when the new version comes from elsewhere        |
+| `change-version`      | deprecated | Alias for `set-version`                                                 |
+| `replace-version`     | deprecated | Alias for `sync-version`                                                |
+
+Call `set-version` **once** per release, then `sync-version` for every other file. Running
+`set-version` a second time is not how secondary files are updated; it tries to set the version
+again and fails instead of synchronising.
+
 ### `set-version`
 
-Detects the current version in a file and replaces it with a new one.
+Detects the current version in a file, replaces it with a new one, and records the pair in
+`./.version` and `./.version_old` for `sync-version`.
 
 ```shell
 python change_version.py set-version <file_path> <version_key> <new_version> [OPTIONS]
@@ -40,26 +48,26 @@ so a version that is already current is an error rather than a silent no-op.
 
 ```shell
 # csproj:            <Version>0.1.0</Version>
-python change_version.py App.csproj Version 0.2.0
+python change_version.py set-version App.csproj Version 0.2.0
 
 # JVM properties:    version=0.1.0
-python change_version.py gradle.properties version 0.2.0
+python change_version.py set-version gradle.properties version 0.2.0
 
 # thunderstore.toml: versionNumber = "0.1.0"
-python change_version.py thunderstore.toml versionNumber 0.2.0
+python change_version.py set-version thunderstore.toml versionNumber 0.2.0
 
 # JSON:              "Version": "0.1.0"
-python change_version.py manifest.json Version 0.2.0
+python change_version.py set-version manifest.json Version 0.2.0
 
 # C#:                [assembly: AssemblyVersion("0.1.0.0")]
-python change_version.py Properties/AssemblyInfo.cs AssemblyVersion 0.2.0.0
+python change_version.py set-version Properties/AssemblyInfo.cs AssemblyVersion 0.2.0.0
 ```
 
 ### `sync-version`
 
-`set-version` also writes the detected old version to `./.version_old` and the
-new one to `./.version`, both in the current working directory. `sync-version`
-reuses that pair to update any other file, which keeps secondary files in sync.
+`set-version` writes the detected old version to `./.version_old` and the new one to `./.version`,
+both in the current working directory. `sync-version` reuses that pair to update any other file,
+which keeps secondary files in sync.
 
 ```shell
 python change_version.py set-version App.csproj Version 0.2.0
@@ -76,6 +84,24 @@ error.
 python change_version.py sync-version manifest.json --version-key version
 ```
 
+A newline-separated list of files can be handled in a loop:
+
+```shell
+while IFS= read -r entry; do
+    file="${entry%%|*}"
+    key="${entry#*|}"
+
+    if [[ "$entry" == *"|"* ]]; then
+        python change_version.py sync-version "$file" --version-key "$key"
+    else
+        python change_version.py sync-version "$file"
+    fi
+done <<'EOF'
+package.json|version
+README.md
+EOF
+```
+
 ### `create-version-file`
 
 `create-version-file` only writes `./.version`. Use it when the new version comes
@@ -87,13 +113,23 @@ from somewhere else, such as a git tag. It normalizes the version the same way
 python change_version.py create-version-file "v1.2.3"
 ```
 
+### Deprecated aliases
+
+The old names still work so existing workflows keep running; Typer additionally marks them as
+deprecated in `--help`, and each call prints a warning before forwarding to the new command.
+
+```shell
+python change_version.py change-version ...   # -> set-version
+python change_version.py replace-version ...  # -> sync-version
+```
+
 ### GitHub Actions outputs
 
 When `GITHUB_OUTPUT` is set, the commands export these step outputs:
 
 | Command               | Outputs                      |
 |-----------------------|------------------------------|
-| `set-version`      | `old_version`, `new_version` |
+| `set-version`         | `old_version`, `new_version` |
 | `create-version-file` | `new_version`                |
 
 ## get_version.py
