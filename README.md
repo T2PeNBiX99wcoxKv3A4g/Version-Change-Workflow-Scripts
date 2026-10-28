@@ -7,12 +7,15 @@ They are mostly used in my GitHub repositories to bump versions automatically.
 
 ## change_version.py
 
-### `change-version`
+> `set-version` and `sync-version` are the current command names. The old
+> `change-version` and `replace-version` commands remain as deprecated aliases and
+> forward to the new ones.
+### `set-version`
 
 Detects the current version in a file and replaces it with a new one.
 
 ```shell
-python change_version.py change-version <file_path> <version_key> <new_version> [OPTIONS]
+python change_version.py set-version <file_path> <version_key> <new_version> [OPTIONS]
 ```
 
 | Option               | Description                                                |
@@ -52,15 +55,15 @@ python change_version.py manifest.json Version 0.2.0
 python change_version.py Properties/AssemblyInfo.cs AssemblyVersion 0.2.0.0
 ```
 
-### `replace-version`
+### `sync-version`
 
-`change-version` also writes the detected old version to `./.version_old` and the
-new one to `./.version`, both in the current working directory. `replace-version`
+`set-version` also writes the detected old version to `./.version_old` and the
+new one to `./.version`, both in the current working directory. `sync-version`
 reuses that pair to update any other file, which keeps secondary files in sync.
 
 ```shell
-python change_version.py change-version App.csproj Version 0.2.0
-python change_version.py replace-version README.md
+python change_version.py set-version App.csproj Version 0.2.0
+python change_version.py sync-version README.md
 ```
 
 Without `--version-key` it replaces every occurrence, which is what documentation
@@ -70,15 +73,15 @@ lines whose key matches instead, in which case a file with no matching line is a
 error.
 
 ```shell
-python change_version.py replace-version manifest.json --version-key version
+python change_version.py sync-version manifest.json --version-key version
 ```
 
 ### `create-version-file`
 
 `create-version-file` only writes `./.version`. Use it when the new version comes
 from somewhere else, such as a git tag. It normalizes the version the same way
-`change-version` does, so `v1.2.3` becomes `1.2.3`. It does not write
-`./.version_old`, so `replace-version` still needs a `change-version` run first.
+`set-version` does, so `v1.2.3` becomes `1.2.3`. It does not write
+`./.version_old`, so `sync-version` still needs a `set-version` run first.
 
 ```shell
 python change_version.py create-version-file "v1.2.3"
@@ -90,7 +93,7 @@ When `GITHUB_OUTPUT` is set, the commands export these step outputs:
 
 | Command               | Outputs                      |
 |-----------------------|------------------------------|
-| `change-version`      | `old_version`, `new_version` |
+| `set-version`      | `old_version`, `new_version` |
 | `create-version-file` | `new_version`                |
 
 ## get_version.py

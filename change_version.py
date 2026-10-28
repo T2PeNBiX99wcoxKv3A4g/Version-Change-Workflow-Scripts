@@ -283,14 +283,23 @@ class ChangeVersion:
         github_output("new_version", self.new_version)
 
 
-@app.command()
-def change_version(file_path: str, version_key: str, new_version: str,
-                   require_keywords: str = "", debug: bool = False):
+@app.command("set-version")
+def set_version(file_path: str, version_key: str, new_version: str,
+                require_keywords: str = "", debug: bool = False):
+    """Set the authoritative version in a file and record old/new for sync-version."""
     debug_output_control(debug)
     ChangeVersion(file_path, version_key, new_version, require_keywords).run()
 
 
-@app.command()
+@app.command("change-version", deprecated=True)
+def change_version(file_path: str, version_key: str, new_version: str,
+                   require_keywords: str = "", debug: bool = False):
+    """Deprecated alias for set-version."""
+    typer.echo("Warning: 'change-version' is deprecated; use 'set-version'.", err=True)
+    set_version(file_path, version_key, new_version, require_keywords, debug)
+
+
+@app.command("create-version-file")
 def create_version_file(new_version: str, debug: bool = False):
     debug_output_control(debug)
     normalized_version = ic(normalize_version(new_version))
@@ -298,16 +307,15 @@ def create_version_file(new_version: str, debug: bool = False):
     github_output("new_version", normalized_version)
 
 
-@app.command()
-def replace_version(file_path: str, version_key: str = "", debug: bool = False):
+def _sync_version(file_path: str, version_key: str = "", debug: bool = False):
     debug_output_control(debug)
     old_version = read_version_file(old_version_file)
     if old_version is None:
-        raise InvalidVersionError(f'No version was found in {old_version_file}. Run change-version first.')
+        raise InvalidVersionError(f'No version was found in {old_version_file}. Run set-version first.')
     new_version = read_version_file(new_version_file)
     if new_version is None:
         raise InvalidVersionError(f'No version was found in {new_version_file}.'
-                                  f' Run change-version or create-version-file first.')
+                                  f' Run set-version or create-version-file first.')
 
     # Without --version-key every occurrence is replaced, which is what
     # documentation files such as README.md need.
@@ -327,6 +335,19 @@ def replace_version(file_path: str, version_key: str = "", debug: bool = False):
             raise InvalidVersionError(f'No line in {file_path} matches the key "{version_key}".')
         raise InvalidVersionError(f'No line in {file_path} holds version {old_version}.')
     echo_replacement(file_path, old_version, new_version, changed_line_count, 'line')
+
+
+@app.command("sync-version")
+def sync_version(file_path: str, version_key: str = "", debug: bool = False):
+    """Copy the version recorded by set-version into another file."""
+    _sync_version(file_path, version_key, debug)
+
+
+@app.command("replace-version", deprecated=True)
+def replace_version(file_path: str, version_key: str = "", debug: bool = False):
+    """Deprecated alias for sync-version."""
+    typer.echo("Warning: 'replace-version' is deprecated; use 'sync-version'.", err=True)
+    sync_version(file_path, version_key, debug)
 
 
 if __name__ == "__main__":
