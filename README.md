@@ -5,13 +5,13 @@ They are not C#-specific: any text-based version file is supported.
 
 ## change_version.py
 
-| Command               | Status     | Purpose                                                                 |
-|-----------------------|------------|-------------------------------------------------------------------------|
-| `set-version`         | current    | Set the authoritative version in the primary file and record old/new    |
-| `sync-version`        | current    | Apply the recorded old → new version to another file                    |
-| `create-version-file` | current    | Write `.version` only, when the new version comes from elsewhere        |
-| `change-version`      | deprecated | Alias for `set-version`                                                 |
-| `replace-version`     | deprecated | Alias for `sync-version`                                                |
+| Command               | Status     | Purpose                                                              |
+|-----------------------|------------|----------------------------------------------------------------------|
+| `set-version`         | current    | Set the authoritative version in the primary file and record old/new |
+| `sync-version`        | current    | Apply the recorded old → new version to another file                 |
+| `create-version-file` | current    | Write `.version` only, when the new version comes from elsewhere     |
+| `change-version`      | deprecated | Alias for `set-version`                                              |
+| `replace-version`     | deprecated | Alias for `sync-version`                                             |
 
 Call `set-version` **once** per release, then `sync-version` for every other file. Running
 `set-version` a second time is not how secondary files are updated; it tries to set the version
