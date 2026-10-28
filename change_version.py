@@ -2,6 +2,7 @@
 import os
 import re
 from enum import Enum
+from warnings import deprecated
 
 import typer
 from icecream import ic
@@ -338,10 +339,11 @@ def set_version(file_path: str, version_key: str, new_version: str,
 
 
 @app.command("change-version", deprecated=True)
+@deprecated("use set-version instead")
 def change_version(file_path: str, version_key: str, new_version: str,
                    require_keywords: str = "", max_matches: int = 1, debug: bool = False):
     """Deprecated alias for set-version."""
-    typer.echo("Warning: 'change-version' is deprecated; use 'set-version'.", err=True)
+    typer.echo("'change-version' is deprecated; use 'set-version'.", err=True)
     set_version(file_path, version_key, new_version, require_keywords, max_matches, debug)
 
 
@@ -397,9 +399,10 @@ def sync_version(file_path: str, version_key: str = "", max_matches: int = -1, d
 
 
 @app.command("replace-version", deprecated=True)
+@deprecated("use sync-version instead")
 def replace_version(file_path: str, version_key: str = "", max_matches: int = -1, debug: bool = False):
     """Deprecated alias for sync-version."""
-    typer.echo("Warning: 'replace-version' is deprecated; use 'sync-version'.", err=True)
+    typer.echo("'replace-version' is deprecated; use 'sync-version'.", err=True)
     sync_version(file_path, version_key, max_matches, debug)
 
 
