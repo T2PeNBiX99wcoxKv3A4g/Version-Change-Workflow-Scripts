@@ -348,6 +348,7 @@ def change_version(file_path: str, version_key: str, new_version: str,
 
 @app.command("create-version-file")
 def create_version_file(new_version: str, debug: bool = False):
+    """Record a new version in .version only, when it comes from elsewhere."""
     debug_output_control(debug)
     normalized_version = ic(normalize_version(new_version))
     write_version_file(normalized_version, VersionFileType.NEW)
