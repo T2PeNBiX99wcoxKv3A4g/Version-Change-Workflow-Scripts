@@ -88,6 +88,14 @@ def parse_require_keywords(require_keywords: str) -> list[str]:
     return [keyword.strip() for keyword in require_keywords.split(",") if keyword.strip()]
 
 
+def validate_max_matches(max_matches: int) -> int:
+    # -1 means "no limit"; every other accepted value has to allow a change, so
+    # 0 and anything below -1 is a mistake rather than a silent no-op.
+    if max_matches == -1 or max_matches >= 1:
+        return max_matches
+    raise InvalidVersionError('--max-matches must be -1 (no limit) or at least 1.')
+
+
 def is_comment_line(line: str) -> bool:
     return line.lstrip().startswith(comment_line_prefixes)
 
@@ -149,18 +157,21 @@ def replace_version_in_match(match: re.Match[str], old_version: str, new_version
 
 def replace_version_in_target_lines(file_path: str, version_pattern: re.Pattern[str],
                                     required_keywords: list[str], old_version: str,
-                                    new_version: str, first_only: bool = False) -> tuple[int, int]:
-    """Replace old_version on every line whose version_key matches.
+                                    new_version: str,
+                                    max_matches: int = -1) -> tuple[int, int, int]:
+    """Replace old_version on the lines whose version_key matches.
 
     Only the version inside the match is rewritten, and only when it is the
     version being replaced. Lines without the key keep their content, so a
     version that merely appears as a substring of an unrelated value is left
-    alone. Returns (target_line_count, changed_line_count).
+    alone.
 
-    With first_only, the first matching line is the only one touched. That is
-    the line the version was detected on, so a dependency that happens to carry
-    the same number as the project version — a PackageReference, for instance —
-    is never rewritten by accident.
+    max_matches caps how many lines may be rewritten; a negative value means no
+    cap. Once the cap is reached the remaining matches are left untouched, which
+    is how set-version keeps a dependency that happens to carry the same number
+    as the project version — a PackageReference, for instance — out of the bump.
+
+    Returns (target_line_count, changed_line_count, skipped_line_count).
     """
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f'File not found: {file_path}.')
@@ -174,22 +185,27 @@ def replace_version_in_target_lines(file_path: str, version_pattern: re.Pattern[
         replaced_lines: list[str] = []
         target_line_count = 0
         changed_line_count = 0
+        skipped_line_count = 0
         for line in file:
             replaced_line = line
-            if not (first_only and target_line_count > 0) \
-                    and match_target_line(line, version_pattern, required_keywords) is not None:
+            match = match_target_line(line, version_pattern, required_keywords)
+            if match is not None:
                 target_line_count += 1
-                replaced_line = version_pattern.sub(replace_match, line)
-                if replaced_line != line:
-                    changed_line_count += 1
+                if 0 <= max_matches <= changed_line_count:
+                    if extract_version(match) == old_version:
+                        skipped_line_count += 1
+                else:
+                    replaced_line = version_pattern.sub(replace_match, line)
+                    if replaced_line != line:
+                        changed_line_count += 1
             replaced_lines.append(replaced_line)
 
-        ic(file_path, target_line_count, changed_line_count)
+        ic(file_path, target_line_count, changed_line_count, skipped_line_count)
         if changed_line_count > 0:
             file.seek(0)
             file.truncate(0)
             file.write("".join(replaced_lines))
-        return target_line_count, changed_line_count
+        return target_line_count, changed_line_count, skipped_line_count
 
 
 def replace_version_in_file(file_path: str, old_version: str, new_version: str) -> int:
@@ -243,14 +259,17 @@ class ChangeVersion:
     new_version: str
     old_version: str
     required_keywords: list[str]
+    max_matches: int
     version_pattern: re.Pattern[str]
 
-    def __init__(self, file_path: str, version_key: str, new_version: str, require_keywords: str = ""):
-        ic(file_path, version_key, new_version, require_keywords)
+    def __init__(self, file_path: str, version_key: str, new_version: str, require_keywords: str = "",
+                 max_matches: int = -1):
+        ic(file_path, version_key, new_version, require_keywords, max_matches)
         self.file_path = file_path
         self.version_key = version_key
         self.new_version = ic(normalize_version(new_version))
         self.required_keywords = ic(parse_require_keywords(require_keywords))
+        self.max_matches = max_matches
         self.version_pattern = ic(build_version_pattern(version_key))
 
     def detect_old_version(self):
@@ -280,9 +299,9 @@ class ChangeVersion:
             github_output("new_version", self.new_version)
             return
 
-        changed_line_count = replace_version_in_target_lines(
+        _, changed_line_count, skipped_line_count = replace_version_in_target_lines(
             self.file_path, self.version_pattern, self.required_keywords, self.old_version, self.new_version,
-            first_only=True)[1]
+            self.max_matches)
         if changed_line_count == 0:
             # detect_old_version already proved a matching line exists, so a zero
             # count means that line already carries new_version. Fail before any
@@ -291,6 +310,9 @@ class ChangeVersion:
                                       f' It already holds version {self.new_version}.')
 
         echo_replacement(self.file_path, self.old_version, self.new_version, changed_line_count, 'line')
+        if skipped_line_count > 0:
+            typer.echo(f'Left {skipped_line_count} further matching line(s) alone:'
+                       f' --max-matches is {self.max_matches}.')
 
         write_version_file(self.new_version, VersionFileType.NEW)
         write_version_file(self.old_version, VersionFileType.OLD)
@@ -300,18 +322,24 @@ class ChangeVersion:
 
 @app.command("set-version")
 def set_version(file_path: str, version_key: str, new_version: str,
-                require_keywords: str = "", debug: bool = False):
-    """Set the authoritative version in a file and record old/new for sync-version."""
+                require_keywords: str = "", max_matches: int = 1, debug: bool = False):
+    """Set the authoritative version in a file and record old/new for sync-version.
+
+    A file can use the version key for something else as well — a PackageReference
+    in a .csproj, for instance — so only the first match is rewritten by default.
+    Pass --max-matches -1 to replace every match.
+    """
     debug_output_control(debug)
-    ChangeVersion(file_path, version_key, new_version, require_keywords).run()
+    ChangeVersion(file_path, version_key, new_version, require_keywords,
+                  validate_max_matches(max_matches)).run()
 
 
 @app.command("change-version", deprecated=True)
 def change_version(file_path: str, version_key: str, new_version: str,
-                   require_keywords: str = "", debug: bool = False):
+                   require_keywords: str = "", max_matches: int = 1, debug: bool = False):
     """Deprecated alias for set-version."""
     typer.echo("Warning: 'change-version' is deprecated; use 'set-version'.", err=True)
-    set_version(file_path, version_key, new_version, require_keywords, debug)
+    set_version(file_path, version_key, new_version, require_keywords, max_matches, debug)
 
 
 @app.command("create-version-file")
@@ -322,8 +350,9 @@ def create_version_file(new_version: str, debug: bool = False):
     github_output("new_version", normalized_version)
 
 
-def _sync_version(file_path: str, version_key: str = "", debug: bool = False):
+def _sync_version(file_path: str, version_key: str = "", max_matches: int = -1, debug: bool = False):
     debug_output_control(debug)
+    validate_max_matches(max_matches)
     old_version = read_version_file(old_version_file)
     if old_version is None:
         raise InvalidVersionError(f'No version was found in {old_version_file}. Run set-version first.')
@@ -347,26 +376,29 @@ def _sync_version(file_path: str, version_key: str = "", debug: bool = False):
         return
 
     version_pattern = ic(build_version_pattern(version_key))
-    target_line_count, changed_line_count = replace_version_in_target_lines(
-        file_path, version_pattern, [], old_version, new_version)
+    target_line_count, changed_line_count, skipped_line_count = replace_version_in_target_lines(
+        file_path, version_pattern, [], old_version, new_version, max_matches)
     if changed_line_count == 0:
         if target_line_count == 0:
             raise InvalidVersionError(f'No line in {file_path} matches the key "{version_key}".')
         raise InvalidVersionError(f'No line in {file_path} holds version {old_version}.')
     echo_replacement(file_path, old_version, new_version, changed_line_count, 'line')
+    if skipped_line_count > 0:
+        typer.echo(f'Left {skipped_line_count} further matching line(s) alone:'
+                   f' --max-matches is {max_matches}.')
 
 
 @app.command("sync-version")
-def sync_version(file_path: str, version_key: str = "", debug: bool = False):
+def sync_version(file_path: str, version_key: str = "", max_matches: int = -1, debug: bool = False):
     """Copy the version recorded by set-version into another file."""
-    _sync_version(file_path, version_key, debug)
+    _sync_version(file_path, version_key, max_matches, debug)
 
 
 @app.command("replace-version", deprecated=True)
-def replace_version(file_path: str, version_key: str = "", debug: bool = False):
+def replace_version(file_path: str, version_key: str = "", max_matches: int = -1, debug: bool = False):
     """Deprecated alias for sync-version."""
     typer.echo("Warning: 'replace-version' is deprecated; use 'sync-version'.", err=True)
-    sync_version(file_path, version_key, debug)
+    sync_version(file_path, version_key, max_matches, debug)
 
 
 if __name__ == "__main__":

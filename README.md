@@ -26,10 +26,11 @@ Detects the current version in a file, replaces it with a new one, and records t
 python change_version.py set-version <file_path> <version_key> <new_version> [OPTIONS]
 ```
 
-| Option               | Description                                                |
-|----------------------|------------------------------------------------------------|
-| `--require-keywords` | Comma-separated keywords that the target line must contain |
-| `--debug`            | Enable `icecream` debug output                             |
+| Option               | Description                                                          |
+|----------------------|----------------------------------------------------------------------|
+| `--require-keywords` | Comma-separated keywords that the target line must contain           |
+| `--max-matches`      | How many lines may be rewritten (default `1`; `-1` means no limit)    |
+| `--debug`            | Enable `icecream` debug output                                       |
 
 `version_key` is a complete key name, matched case-sensitively, so `Version`
 never matches `AssemblyVersion` or `<SupportedOSPlatformVersion>`. The value
@@ -37,12 +38,16 @@ follows a separator (`=`, `:`, `>` or `(`) with an optional surrounding quote, s
 `version = "1.2.3"`, `"Version": "1.2.3"` and `<Version>1.2.3</Version>` all work.
 Lines that start with a comment marker (`#`, `!`, `//`, `<!--`, `;`) are skipped.
 
-The version is detected on the first matching line and replaced **there**, so
-no other line is touched. That matters when the same key also names something
-else: in a `.csproj`, `<Version>` is the project version, while
-`<PackageReference Version="...">` is a dependency, and the two can legitimately
-hold the same number. Use `sync-version` with `--version-key` for a secondary
-file that keeps the version in several keyed lines.
+The version is detected on the first matching line, and at most `--max-matches`
+matching lines are rewritten; everything past that is left untouched. That
+matters when the same key also names something else: in a `.csproj`, `<Version>`
+is the project version, while `<PackageReference Version="...">` is a dependency,
+and the two can legitimately hold the same number. A key whose value is a
+*different* version is never touched either, so `Version="10.0.13"` is safe on
+any line.
+
+Use `sync-version` with `--version-key` for a secondary file that keeps the
+version in several keyed lines; it has no limit by default.
 
 If no line is replaced because the file already holds the requested version, the command is a
 successful no-op and still records `./.version` and `./.version_old` for `sync-version`. A different
@@ -80,10 +85,12 @@ Without `--version-key` it replaces every occurrence, which is what documentatio
 files such as `README.md` need. A file that does not mention the version is
 reported but does not fail. Pass `--version-key` to limit the replacement to
 lines whose key matches instead, in which case a file with no matching line is an
-error.
+error. `--max-matches` caps how many of those lines may be rewritten; it defaults
+to `-1`, meaning no limit.
 
 ```shell
 python change_version.py sync-version manifest.json --version-key version
+python change_version.py sync-version App.csproj --version-key Version --max-matches 1
 ```
 
 A newline-separated list of files can be handled in a loop:
