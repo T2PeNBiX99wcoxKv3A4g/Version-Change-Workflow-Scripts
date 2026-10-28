@@ -356,7 +356,9 @@ def create_version_file(new_version: str, debug: bool = False):
     github_output("new_version", normalized_version)
 
 
-def _sync_version(file_path: str, version_key: str = "", max_matches: int = -1, debug: bool = False):
+@app.command("sync-version")
+def sync_version(file_path: str, version_key: str = "", max_matches: int = -1, debug: bool = False):
+    """Copy the version recorded by set-version into another file."""
     debug_output_control(debug)
     validate_max_matches(max_matches)
     old_version = read_required_version(
@@ -390,12 +392,6 @@ def _sync_version(file_path: str, version_key: str = "", max_matches: int = -1, 
     if skipped_line_count > 0:
         typer.echo(f'Left {skipped_line_count} further matching line(s) alone:'
                    f' --max-matches is {max_matches}.')
-
-
-@app.command("sync-version")
-def sync_version(file_path: str, version_key: str = "", max_matches: int = -1, debug: bool = False):
-    """Copy the version recorded by set-version into another file."""
-    _sync_version(file_path, version_key, max_matches, debug)
 
 
 @app.command("replace-version", deprecated=True)
