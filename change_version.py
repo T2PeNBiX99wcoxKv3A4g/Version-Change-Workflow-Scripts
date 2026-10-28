@@ -266,6 +266,14 @@ class ChangeVersion:
     def run(self):
         self.detect_old_version()
 
+        if self.new_version == self.old_version:
+            typer.echo(f'{self.file_path} already holds version {self.new_version}; nothing to change.')
+            write_version_file(self.new_version, VersionFileType.NEW)
+            write_version_file(self.old_version, VersionFileType.OLD)
+            github_output("old_version", self.old_version)
+            github_output("new_version", self.new_version)
+            return
+
         changed_line_count = replace_version_in_target_lines(
             self.file_path, self.version_pattern, self.required_keywords, self.old_version, self.new_version)[1]
         if changed_line_count == 0:
@@ -316,6 +324,10 @@ def _sync_version(file_path: str, version_key: str = "", debug: bool = False):
     if new_version is None:
         raise InvalidVersionError(f'No version was found in {new_version_file}.'
                                   f' Run set-version or create-version-file first.')
+
+    if old_version == new_version:
+        typer.echo(f'Version is already {new_version}; nothing to sync in {file_path}.')
+        return
 
     # Without --version-key every occurrence is replaced, which is what
     # documentation files such as README.md need.

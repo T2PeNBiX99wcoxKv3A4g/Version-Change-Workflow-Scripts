@@ -13,9 +13,9 @@ They are not C#-specific: any text-based version file is supported.
 | `change-version`      | deprecated | Alias for `set-version`                                              |
 | `replace-version`     | deprecated | Alias for `sync-version`                                             |
 
-Call `set-version` **once** per release, then `sync-version` for every other file. Running
-`set-version` a second time is not how secondary files are updated; it tries to set the version
-again and fails instead of synchronising.
+Call `set-version` **once** per release, then `sync-version` for every other file. Re-running
+`set-version` with the version already in the file is a successful no-op, so workflow retries are
+safe; use `sync-version` to update secondary files.
 
 ### `set-version`
 
@@ -43,8 +43,9 @@ target, which handles a version that lives in several places at once. A matching
 key whose value is a *different* version is left alone, so `Version="10.0.13"` in
 a `PackageReference` is not clobbered when the project version is `0.1.0`.
 
-If no line is replaced the command fails instead of reporting a successful bump,
-so a version that is already current is an error rather than a silent no-op.
+If no line is replaced because the file already holds the requested version, the command is a
+successful no-op and still records `./.version` and `./.version_old` for `sync-version`. A different
+version that cannot be replaced is still an error.
 
 ```shell
 # csproj:            <Version>0.1.0</Version>
@@ -67,7 +68,7 @@ python change_version.py set-version Properties/AssemblyInfo.cs AssemblyVersion 
 
 `set-version` writes the detected old version to `./.version_old` and the new one to `./.version`,
 both in the current working directory. `sync-version` reuses that pair to update any other file,
-which keeps secondary files in sync.
+which keeps secondary files in sync. When the recorded old and new versions are equal, it is a no-op.
 
 ```shell
 python change_version.py set-version App.csproj Version 0.2.0
